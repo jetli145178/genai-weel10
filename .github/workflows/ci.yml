@@ -1,0 +1,41 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  schedule:
+    - cron: '0 3 * * *'
+
+jobs:
+  compose-up:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Start Docker Compose
+        run: |
+          docker compose up -d --build
+
+      - name: Wait for n8n to become ready
+        run: |
+          for i in $(seq 1 60); do
+            status=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:5678 || true)
+            if [ "$status" = "200" ]; then echo "n8n ready"; exit 0; fi
+            echo "Waiting for n8n... ($i)"
+            sleep 5
+          done
+          echo "n8n did not become ready in time"
+          curl -v http://localhost:5678 || true
+          exit 1
+
+      - name: Tear down
+        if: always()
+        run: |
+          docker compose down -v
